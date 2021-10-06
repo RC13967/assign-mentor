@@ -11,6 +11,10 @@ async function createconnection() {
   await client.connect();
   return client;
 }
+//home
+app.get("/", async (request, response) => {
+  response.send("please add endpoints");
+});
 //students data
 app.get("/students", async (request, response) => {
   const client = await createconnection();
