@@ -1,0 +1,139 @@
+import express from "express";
+import { MongoClient } from "mongodb";
+import dotenv from "dotenv";
+dotenv.config();
+const app = express();
+app.use(express.json());
+const PORT = process.env.PORT;
+const MONGO_URL = process.env.MONGO_URL;
+async function createconnection() {
+  const client = new MongoClient(MONGO_URL)
+  await client.connect();
+  return client;
+}
+//students data
+app.get("/students", async (request, response) => {
+  const client = await createconnection();
+  const result = await client.db("database").collection("students").find().toArray();
+  response.send(result);
+});
+//mentors data
+app.get("/mentors", async (request, response) => {
+  const client = await createconnection();
+  const result = await client.db("database").collection("mentors").find().toArray();
+  response.send(result);
+});
+//creates a mentor with the details of him
+app.post("/createMentor", async (request, response) => {
+  const mentorDetails = request.body;
+  const client = await createconnection();
+  const result = await client.db("database").collection("mentors").insertOne(mentorDetails);
+  response.send(result);
+});
+//creates a student with the details of him
+app.post("/createStudent", async (request, response) => {
+  const studentDetails = request.body;
+  const client = await createconnection();
+  const result = await client.db("database").collection("students").insertOne(studentDetails);
+  response.send(result);
+});
+//assigns multiple students for a mentor
+app.put("/assignStudents", async (request, response) => {
+  const assignDetails = request.body;
+  /* format of data sent in body would be as below
+  {
+  "students":[ {
+        "email": "raja@hotmail.com",
+        "mobileNo": "22338",
+        "name": "raja",
+        "pic": "www.yahoo.com"
+    },
+     {
+        "email": "rani@gmail.com",
+        "mobileNo": "22338",
+        "name": "rani",
+        "pic": "www.yahoo.in"
+    }
+  ],
+  "mentor": {
+        "email": "ranjith@gmail.com",
+        "mobileNo": "9480",
+        "name": "ranjith",
+        "pic": "google.com"
+    }
+}
+  */
+  const client = await createconnection();
+  const result = await client.db("database").collection("mentors").updateOne(
+    { email: assignDetails.mentor.email },        //filters the mentor from the list
+    { $push: { "assigned": {$each:assignDetails.students} } }  //adds all students to the assigned array for that mentor
+  );
+  response.send(result);
+});
+//assigns a mentor to a student
+app.put("/assignMentor", async (request, response) => {
+  const assignDetails = request.body;
+  /* format of data sent in body would be as below
+  {
+  "student": {
+        "email": "raja@hotmail.com",
+        "mobileNo": "22338",
+        "name": "raja",
+        "pic": "www.yahoo.com"
+    },
+  "oldMentor": {
+        "email": "ranjith@gmail.com",
+        "mobileNo": "9480",
+        "name": "ranjith",
+        "pic": "google.com"
+    },
+    "newMentor":{
+      "email": "jith@yahoo.com",
+        "mobileNo": "1234",
+        "name": "jith",
+        "pic": "www.google.com"
+    }
+}
+  */
+  const client = await createconnection();
+  if (assignDetails.oldMentor) {   //if the student is already assigned a mentor, that student will be removed from him
+    await client.db("database").collection("mentors").updateOne(
+      { email: assignDetails.oldMentor.email },
+      { $pull: { "assigned": assignDetails.student } }  //removes the student from the mentor
+    )
+  }
+  const result = await client.db("database").collection("mentors").updateOne(
+    { email: assignDetails.newMentor.email },
+    { $push: { "assigned": assignDetails.student } }    //adds the student to the new mentor
+  );
+  response.send(result);
+});
+//finds all the students assigned to a mentor
+app.get("/mentees", async (request, response) => {
+  const mentor = request.body;
+  /* format of data sent in body would be as below
+ {
+        "email": "Branson_Green@hotmail.com",
+        "mobileNo": "869-456-3380 x648",
+        "name": "Vernon Swift",
+        "pic": "https://cdn.fakercloud.com/avatars/ipavelek_128.jpg"
+}
+  */
+  const client = await createconnection();
+  const result = await client.db("database").collection("mentors").aggregate([
+    {
+      "$match": {
+        email: mentor.email   //filters the mentor by the unique email
+      }
+    },
+    {
+      "$project": {
+        assigned: 1,       //finds the assigned students
+        _id:0
+      }
+    }
+  ]).toArray();
+  response.send(result);
+});
+
+app.listen(PORT, () => console.log("The server is started"));
