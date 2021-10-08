@@ -128,21 +128,13 @@ app.put("/assignMentor", async (request, response) => {
   response.send(result);  
 });
 //finds all the students assigned to a mentor
-app.get("/mentees", async (request, response) => {
-  const mentor = request.body;
-  /* format of data sent in body would be as below
- {
-        "email": "Branson_Green@hotmail.com",
-        "mobileNo": "869-456-3380 x648",
-        "name": "Vernon Swift",
-        "pic": "https://cdn.fakercloud.com/avatars/ipavelek_128.jpg"
-}
-  */
+app.get("/mentees/:mentorEmail", async (request, response) => {
+  const {mentorEmail} = request.params;
   const client = await createconnection();
   const result = await client.db("database").collection("mentors").aggregate([
     {
       "$match": {
-        email: mentor.email   //filters the mentor by the unique email
+        email: mentorEmail   //filters the mentor by the unique email
       }
     },
     {
