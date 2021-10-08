@@ -5,7 +5,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT;
-const MONGO_URL = process.env.MONGO_URL;
+ const MONGO_URL = process.env.MONGO_URL;
 async function createconnection() {
   const client = new MongoClient(MONGO_URL)
   await client.connect();
@@ -46,7 +46,7 @@ app.put("/assignStudents", async (request, response) => {
   const assignDetails = request.body;
   /* format of data sent in body would be as below
   {
-  "students":[ {
+  "newMentees":[ {
         "email": "raja@hotmail.com",
         "mobileNo": "22338",
         "name": "raja",
@@ -70,27 +70,34 @@ app.put("/assignStudents", async (request, response) => {
   const client = await createconnection();
   const result = await client.db("database").collection("mentors").updateOne(
     { email: assignDetails.mentor.email },        //filters the mentor from the list
-    { $push: { "assigned": {$each:assignDetails.students} } }  //adds all students to the assigned array for that mentor
+    { $push: { "assigned": { $each: assignDetails.newMentees } } }  //adds new mentees to the filtered mentor
+  );
+  await client.db("database").collection("students").updateMany(
+    { $or: assignDetails.newMentees },        //filters the new mentees from the list
+    { $set: { "mentor": assignDetails.mentor } }  //adds the mentor to all new mentees
   );
   response.send(result);
 });
 //assigns a mentor to a student
 app.put("/assignMentor", async (request, response) => {
   const assignDetails = request.body;
+  const student = assignDetails.student;
+  const oldMentor = assignDetails.oldMentor;
+  const newMentor = assignDetails.newMentor;
   /* format of data sent in body would be as below
   {
   "student": {
         "email": "raja@hotmail.com",
         "mobileNo": "22338",
         "name": "raja",
-        "pic": "www.yahoo.com"
-    },
-  "oldMentor": {
+        "pic": "www.yahoo.com"},
+         "oldMentor": {
         "email": "ranjith@gmail.com",
         "mobileNo": "9480",
         "name": "ranjith",
         "pic": "google.com"
     },
+ 
     "newMentor":{
       "email": "jith@yahoo.com",
         "mobileNo": "1234",
@@ -100,17 +107,25 @@ app.put("/assignMentor", async (request, response) => {
 }
   */
   const client = await createconnection();
-  if (assignDetails.oldMentor) {   //if the student is already assigned a mentor, that student will be removed from him
+  if (oldMentor && oldMentor.email) {   //if the student is already assigned a mentor, that student will be removed from him
     await client.db("database").collection("mentors").updateOne(
-      { email: assignDetails.oldMentor.email },
-      { $pull: { "assigned": assignDetails.student } }  //removes the student from the mentor
-    )
-  }
-  const result = await client.db("database").collection("mentors").updateOne(
-    { email: assignDetails.newMentor.email },
-    { $push: { "assigned": assignDetails.student } }    //adds the student to the new mentor
+      { email:oldMentor.email },                   //selects old mentor
+      { $pull: {assigned:{email:student.email}} }  //removes the student from the mentor
+    );
+  };
+   await client.db("database").collection("students").updateOne(
+    {email: student.email },
+    { $unset:{mentor:""} }  //removes the mentor from the student
   );
-  response.send(result);
+  const result = await client.db("database").collection("mentors").updateOne(
+    { email: newMentor.email },
+    { $push: { "assigned": student } }    //adds the student to the new mentor
+  );
+  await client.db("database").collection("students").updateOne(
+    {email: student.email },                                                 //selects the student
+    { $set: { "mentor": newMentor } }                //assigns new mentor to the student
+  );
+  response.send(result);  
 });
 //finds all the students assigned to a mentor
 app.get("/mentees", async (request, response) => {
@@ -133,7 +148,7 @@ app.get("/mentees", async (request, response) => {
     {
       "$project": {
         assigned: 1,       //finds the assigned students
-        _id:0
+        _id: 0
       }
     }
   ]).toArray();
